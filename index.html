@@ -258,10 +258,34 @@
                 }
             }
 
-            // Function to filter markers based on selected criteria
-            // function filterMarkers() {
-            //    addMarkersToMap();
-            // }
+            // Function to add markers to map
+            function addMarkersToMap() {
+                markersLayer.clearLayers();
+                
+                accidents.forEach(accident => {
+                        // Create marker with popup
+                        const marker = L.marker([accident.latitude, accident.longitude], {
+                            icon: icons[accident.severity] || L.divIcon({className: 'custom-icon'})
+                        });
+                        
+                        // Create popup content
+                        const popupContent = `
+                            <div>
+                                <h3>Accident #${accident.id}</h3>
+                                <p><strong>Date/Time:</strong> ${accident.datetime}</p>
+                                <p><strong>Location:</strong> ${accident.city}</p>
+                                <p><strong>Severity:</strong> ${accident.severity}</p>
+                                <p><strong>Type:</strong> ${accident.type}</p>
+                                <p><strong>Description:</strong> ${accident.description}</p>
+                                <p><strong>Coordinates:</strong> ${accident.latitude}, ${accident.longitude}</p>
+                            </div>
+                        `;
+                        
+                        marker.bindPopup(popupContent);
+                        markersLayer.addLayer(marker);
+
+                });
+            }
 
             // Load data automatically when page loads
             loadGitHubData();
