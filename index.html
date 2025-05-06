@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Accident Map - Serbia</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100%;
+        }
+        #map {
+            flex-grow: 1;
+            width: 100%;
+            height: 100vh; /* Full viewport height */
+            z-index: 1;
+        }
+        .legend {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            line-height: 1.5;
+        }
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+            border-radius: 50%;
+        }
+        /* Custom cluster icon styles */
+        .marker-cluster {
+            background-clip: padding-box;
+            border-radius: 20px;
+            text-align: center;
+        }
+        .marker-cluster div {
+            width: 30px;
+            height: 30px;
+            margin-left: 5px;
+            margin-top: 5px;
+            text-align: center;
+            border-radius: 15px;
+            font-size: 12px;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .cluster-icon {
+            background-color: rgba(74, 111, 165, 0.8);
+            line-height: 30px;
+            border-radius: 50%;
+            width: 100%;
+            height: 100%;
+        }
+        .marker-cluster-small {
+            background-color: rgba(181, 226, 140, 0.6);
+        }
+        .marker-cluster-medium {
+            background-color: rgba(241, 211, 87, 0.6);
+        }
+        .marker-cluster-large {
+            background-color: rgba(253, 156, 115, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="map"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script>
+        // Initialize map with a lighter weight approach
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize map
+            const map = L.map('map').setView([44.01, 20.91], 7);
+            
+            // Try multiple tile providers in case one fails
+            const openStreetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
+            
+            const cartoDBLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19
+            });
+            
+            const esriWorldImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                maxZoom: 19
+            });
+            
+            // Add base layers control
+            const baseLayers = {
+                "OpenStreetMap": openStreetMap,
+                "CartoDB Light": cartoDBLight,
+                "Satellite": esriWorldImagery
+            };
+            
+            L.control.layers(baseLayers, null).addTo(map);
+
+            // Define icons for different severities
+            const icons = {
+                'Sa povredjenim': L.divIcon({
+                    className: 'custom-icon',
+                    html: `<svg width="20" height="20" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="50" cy="50" r="40" fill="#e74c3c" />
+                          </svg>`,
+                    iconSize: [20, 20]
+                }),
+                'Sa mat.stetom': L.divIcon({
+                    className: 'custom-icon',
+                    html: `<svg width="20" height="20" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="50" cy="50" r="40" fill="#3498db" />
+                          </svg>`,
+                    iconSize: [20, 20]
+                })
+            };
+
+            // Global variables
+            let markersLayer = L.markerClusterGroup({
+                showCoverageOnHover: true,
+                zoomToBoundsOnClick: true,
+                spiderfyOnMaxZoom: true,
+                removeOutsideVisibleBounds: true,
+                iconCreateFunction: function(cluster) {
+                    const count = cluster.getChildCount();
+                    let size = 'small';
+                    if (count > 10) size = 'medium';
+                    if (count > 30) size = 'large';
+                    
+                    return L.divIcon({
+                        html: `<div class="cluster-icon">${count}</div>`,
+                        className: `marker-cluster marker-cluster-${size}`,
+                        iconSize: new L.Point(40, 40)
+                    });
+                }
+            }).addTo(map);
+            let accidents = [];
+            let accidentTypes = new Set();
+            
+            // Add legend
+            const legend = L.control({position: 'bottomright'});
+            legend.onAdd = function() {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = `
+                    <h4>Accident Severity</h4>
+                    <div><i style="background: #e74c3c"></i> With Injuries</div>
+                    <div><i style="background: #3498db"></i> Material Damage Only</div>
+                `;
+                return div;
+            };
+            legend.addTo(map);
+
+            // Function to load data from the local directory
+            function loadGitHubData() {
+                // Local file path - in the same directory as the HTML file
+                const localFilePath = 'nez-opendata-20254-20250425.csv';
+                
+                // Fetch data from the local path
+                fetch(localFilePath)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.text();
+                    })
+                    .then(csvText => {
+                        Papa.parse(csvText, {
+                            header: false,
+                            skipEmptyLines: true,
+                            dynamicTyping: true,  // Automatically detect number types
+                            complete: function(results) {
+                                processData(results.data);
+                            }
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error fetching data:', error);
+                    });
+            }
+
+            // Function to process data
+            function processData(data) {
+                // Skip empty rows and header if present
+                const startIndex = data.findIndex(row => row[0] && !isNaN(row[0]));
+                if (startIndex === -1) {
+                    return;
+                }
+                
+                // Reset data
+                accidents = [];
+                accidentTypes.clear();
+                markersLayer.clearLayers();
+                
+                // Process valid rows
+                for (let i = startIndex; i < data.length; i++) {
+                    const row = data[i];
+                    if (!row[0] || !row[4] || !row[5]) continue; // Skip rows without ID or coordinates
+                    
+                    try {
+                        const accident = {
+                            id: row[0],
+                            city: row[1],
+                            area: row[2],
+                            datetime: row[3],
+                            longitude: parseFloat(row[4]),
+                            latitude: parseFloat(row[5]),
+                            severity: row[6],
+                            type: row[7],
+                            description: row[8]
+                        };
+                        
+                        // Add to accidents array
+                        accidents.push(accident);
+                        
+                        // Add to accident types set
+                        if (accident.type) {
+                            accidentTypes.add(accident.type);
+                        }
+                    } catch (e) {
+                        console.error('Error processing row:', e, row);
+                    }
+                }
+                
+                // Add markers to map
+                addMarkersToMap();
+                
+                // Fit map to bounds if we have markers
+                if (accidents.length > 0 && markersLayer.getLayers().length > 0) {
+                    try {
+                        const bounds = markersLayer.getBounds();
+                        map.fitBounds(bounds);
+                    } catch (e) {
+                        console.error('Error fitting bounds:', e);
+                        // Fallback to center on Serbia
+                        map.setView([44.01, 20.91], 7);
+                    }
+                }
+            }
+
+            // Function to filter markers based on selected criteria
+            // function filterMarkers() {
+            //    addMarkersToMap();
+            // }
+
+            // Load data automatically when page loads
+            loadGitHubData();
+            
+            // Force a map resize after a brief delay to help with rendering
+            setTimeout(function() {
+                map.invalidateSize();
+            }, 100);
+        });
+    </script>
+</body>
+</html>
